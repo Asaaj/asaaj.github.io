@@ -28,7 +28,7 @@ twitter_username: Jacob_R_Rice
 github_username:  Asaaj
 
 # Build settings
-theme: minima
+theme: jekyll-theme-tactile
 plugins:
   - jekyll-feed
 
