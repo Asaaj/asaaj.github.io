@@ -21,14 +21,14 @@
 title: bitwise
 email: jacob@rice.systems
 description: >- # this means to ignore newlines until "baseurl:"
-  Mostly code stuff, I guess.
+  A catalog of my exploration of C++, Rust, and Vulkan.
 baseurl: "" # the subpath of your site, e.g. /blog
-url: "https://jacob.rice.systems" # the base hostname & protocol for your site, e.g. http://example.com
+url: "https://asaaj.github.io" # the base hostname & protocol for your site, e.g. http://example.com
 twitter_username: Jacob_R_Rice
 github_username:  Asaaj
 
 # Build settings
-theme: jekyll-theme-tactile
+theme: minima
 plugins:
   - jekyll-feed
 
