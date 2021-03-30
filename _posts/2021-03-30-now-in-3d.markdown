@@ -1,0 +1,157 @@
+---
+layout: post
+title:  "Now in 3D!"
+date:   2021-03-30
+categories: rust
+---
+# Into the Third Dimension
+
+Well, I've made some good progress. I have successfully made it into three dimensions, added an image buffer to map textures, and even added a sphere:
+
+![Spinning sphere](/blog/assets/2021/03/sphere.gif)
+
+So, let's examine what I've accomplished and, more importantly, what I've learned.
+
+#### First up: a cube
+
+I won't pretend this went off without a hitch. While I was working on my first cube, I made the mistake of thinking "It won't be that difficult to just hard-code the indices for all 12 triangles, right?" Of course, it didn't end up quite right.
+
+![Bad cube](/blog/assets/2021/03/very-bad-cube.gif)
+
+After that, I actually pulled out some paper and labeled the corners to get a better handle on my coordinate system. That helped a lot, although I was still having an issue of triangle ordering. Basically, I'm just generating my triangles in a single order, and the GPU uses that order to draw. So I ended up drawing back faces in front of front faces:
+
+![Better cube](/blog/assets/2021/03/almost.gif)
+
+It's not drawing the faces closest to the camera on top, because it doesn't know anything about that distance. There are a couple of solutions to this:
+
+1. Sort the triangles based on depth from the camera. For a cube this isn't that hard, but you can imagine this would take a long time for a big complex scene.
+2. Calculate the depth to the faces in each pixel and use that to decide what to draw (i.e. generate a depth buffer).
+
+But those sounded difficult, so I opted for a non-solution: turn on [back-face culling][back-face-culling], so the GPU makes the backs of each cube face invisible, and make sure all of the triangles are "wound" correctly so they count as front faces. 
+
+This is not a solution, since other objects in the scene will still be drawn wrong, but it's fine for one cube. More on this later, probably. I hadn't yet implemented any image buffers, which I would need for the depth buffer, and while that is the correct thing to do, this is just fine until I get to that. So here's the result:
+
+![Best cube](/blog/assets/2021/03/finally.gif)
+
+#### Next up: a sphere
+
+A sphere was probably not the most reasonable next shape, but I want my first project in this system to be something like [this terrific video][procedural-moons-and-planets]. Plus, since I had already generated a cube, I could use similar code to generate a "cube-sphere":
+
+1. Start with a cube with side length `diameter`:
+
+   ![Step 1](/blog/assets/2021/03/cube-sphere-1.png){:height="400px"}
+
+2. Subdivide the faces into many sub-squares (well, triangles):
+
+   ![Step 2](/blog/assets/2021/03/cube-sphere-2.png){:height="400px"}
+
+3. Contract all of the points toward the center of the sphere so they're all `radius` units away:
+
+   ![Step 3](/blog/assets/2021/03/cube-sphere-3.png){:height="400px"}
+
+The above "sphere" is only using 16 sub-squares per face, but if you increase that, you can get a pretty smooth sphere:
+
+![Step 4](/blog/assets/2021/03/cube-sphere-4.png)
+
+The next one I want to make is the "[icosphere][icosphere]", which is mentioned in the same video I linked above. It has nicer control over vertex density, and all of the vertices are quite evenly spaced, but I'll work on that later.
+
+# What I've Learned
+
+#### #1: Learn your tools
+
+Rust's built-in package manager makes it incredibly easy to use code that you didn't write. With C++, I'm used to this step taking some effort, and so I use it somewhat more conservatively; I might pull in some important projects, but I make do with mostly just the standard library and a few extensions. In Rust, however, I find myself depending upon several libraries, but I've only really read the docs on a couple.
+
+At the time of writing, my project depends on these libraries:
+
+1. `vulkano = "0.21.0"`: The main Vulkan wrapper.
+2. `vulkano-shaders = "0.21.0"`: Supports compiling GLSL shaders right in your code.
+3. `vulkano-win = "0.21.0"`: Allows `vulkano` to draw to a window, I think.
+4. `winit = "0.24.0"`: The main window library.
+5. `image = "0.23.14"`: Something I used in the tutorial?
+6. `nalgebra = "0.25.3"`: Linear algebra library (I don't currently use this).
+7. `nalgebra-glm = "0.11.0"`: Extension of `nalgebra` to look more like [GLM][glm] (I use this a lot).
+8. `png = "0.15.0"`: Used for loading textures, just copied from the `vulkano` examples.
+
+At the end of my last post, I left off saying I was trying to figure out descriptor sets. This was because I had not read about `vulkano-shaders`, and I didn't understand its power. It turns out very little work has to be done in the Rust side of things to bind descriptors into the shaders side of things when you use `vulkano-shaders`. Instead, you simply add things to your shader like this:
+
+{% highlight rust %}
+pub mod ubo_vertex {
+vulkano_shaders::shader!{
+	ty: "vertex",
+	src: "
+...
+layout(set = 0, binding = 0) uniform UniformBufferObject {
+	mat4 model;
+	mat4 view;
+	mat4 proj;
+} ubo;
+...
+"
+}
+}
+{% endhighlight %}
+
+And then `UniformBufferObject` is ready to be used in your Rust code like this:
+
+{% highlight rust %}
+type ShaderUbo = ubo_vertex::ty::UniformBufferObject;
+let uniform_buffer_pool: CpuBufferPool<ShaderUbo>
+	= CpuBufferPool::<ShaderUbo>::new(
+		device.clone(), 
+		BufferUsage::uniform_buffer()
+	);
+{% endhighlight %}
+
+No need to do all of the manual descriptor set setup and whatnot. If I had read even the first page of the `vulkano-shaders` documentation, I would've known this. The one thing I don't like is that I'm pretty sure I'm doing way too much work. Right now, I'm rebuilding my command buffers every frame, and I don't entirely know how to avoid it yet. It makes sense in C++ Vulkan, but I can't seem to get `vulkano` to behave as nicely. But that's mostly just my lack of Rust knowledge showing through, I bet.
+
+Using the descriptor set is quite easy as well. I update the camera position in a function that returns `CpuBufferPoolSubbuffer::<ShaderUbo, Arc<StdMemoryPool>>`, then I add that to a DescriptorSet like this:
+
+{% highlight rust %}
+let layout0 = vulkan.pipeline.descriptor_set_layout(0).unwrap();
+let ubo_descriptor_set = Box::new(
+	PersistentDescriptorSet::start(layout0.clone())
+		.add_buffer(uniform_buffer_subbuffer)
+		.unwrap()
+		.build()
+		.unwrap()
+);
+{% endhighlight %}
+
+(I'm pretty sure `PersistentDescriptorSet` is wrong, and I definitely shouldn't be doing so much work every frame, but it's not effecting performance yet, so whatever). That `0` in `descriptor_set_layout` is automatically set up and checked at runtime to match the `layout(set = XX, ...)` in the shader I declared earlier. If it's a different type, you get a panic with a fairly helpful stack trace. Then I build a vector of all of the descriptor sets and use them in my Draw command:
+
+{% highlight rust %}
+let desc_sets: Vec<Box<dyn DescriptorSet + Send + Sync>>
+	= vec![ubo_descriptor_set, texture_descriptor_set, /*...*/];
+draw_builder
+	/*...*/
+	.draw_indexed(
+		pipeline.clone(),
+		&dynamic_state,
+		buffers.vertex.clone(),
+		buffers.index.clone(),
+		desc_sets,
+		(),
+		None,
+	)
+	/*...*/
+{% endhighlight %}
+
+I feel like I'm being too explicit with my types right now, but that's something for later as well.
+
+#### #2: I don't always have to worry about doing it right the first time
+
+As you may have noticed in many places in this post, I've been saying "I'll worry about that later". I have a habit of wanting to write code and never return to it. That's fine in a project that has a known direction, and especially if it's using languages and frameworks that I am familiar with. In this project, though, I just have to accept that I will get a lot of things wrong, and I should expect to go back to change them later.
+
+My default response to this would be to use abstraction with some clearly-defined interfaces to separate out areas that I know will need heavy reworking as I learn more Rust and Vulkan. While I'm doing that to some extent, I haven't fully shifted into the more functional style that Rust encourages, and even then my functional experience is pretty limited, so that will take work. Abstraction is a nice ideal, but it's not just one thing; different programming paradigms can require dramatically different methods of abstraction. So that's something that I'll be working on more as I try to use this engine for something useful.
+
+# Up Next
+
+That may have been long-winded for the amount I actually accomplished, but it's been a lot of work. Up next is [depth buffers][depth-buffers], and then hopefully some basic lighting. The tutorial doesn't seem to include anything on lighting, but I think I can figure it out pretty easily after I get depth buffers in place. I'll check back here when I've made some progress with those.
+
+As always, my email is at the bottom of the page, so feel free to contact me with any questions or corrections!
+
+[back-face-culling]: https://en.wikipedia.org/wiki/Back-face_culling
+[procedural-moons-and-planets]: https://youtu.be/lctXaT9pxA0
+[icosphere]: https://en.wikipedia.org/wiki/Geodesic_polyhedron
+[glm]: https://github.com/g-truc/glm
+[depth-buffers]: https://vulkan-tutorial.com/en/Depth_buffering

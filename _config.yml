@@ -18,13 +18,12 @@
 # You can create any custom variable you would like, and they will be accessible
 # in the templates via {{ site.myvariable }}.
 
-title: bitwise
+title: a little bit rusty
 email: jacob@rice.systems
 description: >- # this means to ignore newlines until "baseurl:"
   A catalog of my exploration of C++, Rust, and Vulkan.
 baseurl: "" # the subpath of your site, e.g. /blog
 url: "https://asaaj.github.io" # the base hostname & protocol for your site, e.g. http://example.com
-twitter_username: Jacob_R_Rice
 github_username:  Asaaj
 
 # Build settings

@@ -2,7 +2,7 @@
 layout: post
 title:  "Hello, Rust"
 date:   2021-03-24
-categories: rusty-spoon
+categories: rust
 ---
 # Hi, I'm Jacob
 
@@ -20,7 +20,7 @@ And when I say it'll be a "basic" engine, I really just mean I have no idea how 
 
 Here's the current state of my project:
 
-![Rusty Spoon v0.0.0.0.0.1](/assets/rusty-spoon-v0.0.0.0.0.1.png)
+![Rusty Spoon v0.0.0.0.0.1](/blog/assets/2021/03/rusty-spoon-v0.0.0.0.0.1.png)
 
 So... it's in the early stages. I had the rectangle bouncing around like the Pong ball, but I scrapped that in my current effort to get it to spin in 3D (from the [introduction to descriptor sets in the Vulkan tutorial][vulkan-desc-pools]).
 
